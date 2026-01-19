@@ -72,28 +72,103 @@ def calculate_similarity(lost_item_data: dict, found_item_data: dict) -> float:
     """
     score = 0.0
     
-    # Category match (40% weight)
+    # Text similarity using TF-IDF (default baseline)
+    try:
+        from sklearn.feature_extraction.text import TfidfVectorizer
+        from sklearn.metrics.pairwise import cosine_similarity
+        
+        lost_text_full = f"{lost_item_data.get('title', '')} {lost_item_data.get('description', '')} {lost_item_data.get('category', '')} {lost_item_data.get('location_found', '')}"
+        found_text_full = f"{found_item_data.get('title', '')} {found_item_data.get('description', '')} {found_item_data.get('category', '')} {found_item_data.get('location_found', '')}"
+        
+        corpus = [lost_text_full, found_text_full]
+        vectorizer = TfidfVectorizer().fit_transform(corpus)
+        vectors = vectorizer.toarray()
+        text_score = cosine_similarity([vectors[0]], [vectors[1]])[0][0]
+        score += text_score * 0.4  # Base text score (40%)
+        
+    except ImportError:
+        print("scikit-learn not found")
+        
+    # CLIP AI Matching (Image-Text & Image-Image)
+    try:
+        import torch
+        from transformers import CLIPProcessor, CLIPModel
+        from PIL import Image
+        import requests
+        from io import BytesIO
+
+        # Simple caching for model (in a real worker, this persists)
+        if not hasattr(calculate_similarity, "model"):
+             print("Loading CLIP Model (this happens once)...")
+             calculate_similarity.model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+             calculate_similarity.processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+
+        model = calculate_similarity.model
+        processor = calculate_similarity.processor
+
+        # Helpers
+        def load_image(url_or_path):
+            try:
+                if url_or_path.startswith("http"):
+                    response = requests.get(url_or_path, timeout=5)
+                    return Image.open(BytesIO(response.content))
+                else:
+                    return Image.open(url_or_path) # Local path
+            except Exception:
+                return None
+
+        # Get inputs
+        lost_img_path = lost_item_data.get('images', [None])[0]
+        found_img_path = found_item_data.get('images', [None])[0]
+        
+        lost_image = load_image(lost_img_path) if lost_img_path else None
+        found_image = load_image(found_img_path) if found_img_path else None
+
+        clip_score = 0.0
+        
+        # Case 1: Image <-> Image
+        if lost_image and found_image:
+            inputs = processor(images=[lost_image, found_image], return_tensors="pt", padding=True)
+            outputs = model.get_image_features(**inputs)
+            # Cosine similarity between two image vectors
+            cos = torch.nn.CosineSimilarity(dim=1, eps=1e-6)
+            clip_score = cos(outputs[0].unsqueeze(0), outputs[1].unsqueeze(0)).item()
+            score += clip_score * 0.4  # Big boost if images match
+            
+        # Case 2: Image <-> Text (Multimodal)
+        elif lost_image or found_image:
+            # One has image, match with other's text
+            image_input = lost_image or found_image
+            text_input = found_text_full if lost_image else lost_text_full
+            # Truncate text to fit context window
+            text_input = text_input[:77] 
+            
+            inputs = processor(text=[text_input], images=image_input, return_tensors="pt", padding=True)
+            outputs = model(**inputs)
+            # Logits per image is the similarity score
+            logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
+            probs = logits_per_image.softmax(dim=1) # softmax to get probability
+            # CLIP raw scores are logits, usually high. We can normalize or use raw cosine if we extracted features manually.
+            # Let's use the raw logit divided by 100 as a rough heuristic or just extract features manually for cosine.
+            
+            # Better way: Get features and cosine
+            img_embed = model.get_image_features(pixel_values=inputs['pixel_values'])
+            text_embed = model.get_text_features(input_ids=inputs['input_ids'], attention_mask=inputs['attention_mask'])
+            
+            cos = torch.nn.CosineSimilarity(dim=1, eps=1e-6)
+            clip_score = cos(img_embed, text_embed).item()
+            score += clip_score * 0.3 # Moderate boost for Image-Text match
+            
+    except ImportError:
+        print("Torch/Transformers not installed, skipping AI matching")
+    except Exception as e:
+        print(f"CLIP Error: {e}")
+
+    # Category match (20% weight)
     if lost_item_data.get('category') == found_item_data.get('category'):
-        score += 0.4
+        score += 0.2
     
-    # Title/description similarity (30% weight)
-    # TODO: Implement text similarity (e.g., using sentence transformers)
-    lost_text = f"{lost_item_data.get('title', '')} {lost_item_data.get('description', '')}".lower()
-    found_text = f"{found_item_data.get('title', '')} {found_item_data.get('description', '')}".lower()
-    
-    # Simple word overlap for now
-    lost_words = set(lost_text.split())
-    found_words = set(found_text.split())
-    
-    if lost_words and found_words:
-        overlap = len(lost_words & found_words) / len(lost_words | found_words)
-        score += overlap * 0.3
-    
-    # Location proximity (20% weight)
-    if lost_item_data.get('location_found') and found_item_data.get('location_found'):
-        if lost_item_data['location_found'].lower() in found_item_data['location_found'].lower() or \
-           found_item_data['location_found'].lower() in lost_item_data['location_found'].lower():
-            score += 0.2
+    return min(score, 1.0)
     
     # Date proximity (10% weight)
     # TODO: Implement date comparison

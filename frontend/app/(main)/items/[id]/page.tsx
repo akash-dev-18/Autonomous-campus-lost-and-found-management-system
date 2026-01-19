@@ -74,9 +74,14 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
           .filter((i) => i.id !== id && i.category === itemData.category)
           .slice(0, 3)
         setSimilarItems(similar)
-      } catch (error) {
-        console.error("Failed to fetch item:", error)
-        toast.error("Failed to load item")
+      } catch (error: any) {
+        if (error.message?.includes("Item not found") || error.message?.includes("404")) {
+           // Item not found is an expected state, no need to log error
+           setItem(null)
+        } else {
+           console.error("Failed to fetch item:", error)
+           toast.error("Failed to load item")
+        }
       } finally {
         setLoading(false)
       }
