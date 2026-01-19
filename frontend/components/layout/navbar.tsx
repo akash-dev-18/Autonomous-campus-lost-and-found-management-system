@@ -23,6 +23,7 @@ const navigation = [
   { name: "Matches", href: "/matches" },
   { name: "Claims", href: "/claims" },
   { name: "Messages", href: "/messages" },
+  { name: "My Items", href: "/items?mine=true" },
 ]
 
 export function Navbar() {

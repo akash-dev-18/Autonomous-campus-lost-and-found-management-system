@@ -52,12 +52,19 @@ export default function ItemsPage() {
     async function fetchItems() {
       try {
         setLoading(true)
-        const response = await itemsAPI.getItems({
-          type: typeFilter !== "all" ? typeFilter : undefined,
-          status: statusFilter !== "all" ? statusFilter : undefined,
-          category: categoryFilter !== "all" ? categoryFilter : undefined,
-        })
-        setItems(response.items || [])
+        const isMine = searchParams.get('mine') === 'true'
+        
+        if (isMine) {
+           const myItems = await itemsAPI.getMyItems()
+           setItems(myItems || [])
+        } else {
+           const response = await itemsAPI.getItems({
+            type: typeFilter !== "all" ? typeFilter : undefined,
+            status: statusFilter !== "all" ? statusFilter : undefined,
+            category: categoryFilter !== "all" ? categoryFilter : undefined,
+          })
+          setItems(response.items || [])
+        }
       } catch (error) {
         console.error("Failed to fetch items:", error)
         toast.error("Failed to load items")
@@ -67,7 +74,7 @@ export default function ItemsPage() {
       }
     }
     fetchItems()
-  }, [typeFilter, statusFilter, categoryFilter])
+  }, [typeFilter, statusFilter, categoryFilter, searchParams])
 
   const filteredItems = useMemo(() => {
     let filtered = [...items]
@@ -120,17 +127,30 @@ export default function ItemsPage() {
         {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">Items</h1>
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">
+              {searchParams.get('mine') === 'true' ? "My Items" : "Items"}
+            </h1>
             <p className="mt-1 text-muted-foreground">
-              Browse and search for lost & found items
+              {searchParams.get('mine') === 'true' 
+                ? "Manage your reported lost and found items" 
+                : "Browse and search for lost & found items"}
             </p>
           </div>
-          <Button asChild>
-            <Link href="/items/create">
-              <Plus className="mr-2 h-4 w-4" />
-              Report Item
-            </Link>
-          </Button>
+          <div className="flex gap-2">
+             {searchParams.get('mine') === 'true' && (
+                <Button variant="outline" asChild>
+                  <Link href="/items">
+                    View All Items
+                  </Link>
+                </Button>
+             )}
+              <Button asChild>
+                <Link href="/items/create">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Report Item
+                </Link>
+              </Button>
+          </div>
         </div>
 
         {/* Search and Filters Bar */}

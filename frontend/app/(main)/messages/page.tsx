@@ -15,19 +15,55 @@ import type { User as UserType } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 
+import { useRouter, useSearchParams } from "next/navigation"
+
 export default function MessagesPage() {
   const { user: currentUser } = useAuth()
   const { messages: wsMessages, sendMessage, isConnected, error } = useWebSocket()
+  const searchParams = useSearchParams()
+  const initialUserId = searchParams.get('user')
   
   const [users, setUsers] = useState<UserType[]>([])
   const [selectedUser, setSelectedUser] = useState<UserType | null>(null)
+  
   const [historicalMessages, setHistoricalMessages] = useState<any[]>([])
   const [newMessage, setNewMessage] = useState("")
   const [searchQuery, setSearchQuery] = useState("")
   const [loading, setLoading] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // Fetch users on mount
+  // Handle initial user selection from URL
+  useEffect(() => {
+    async function handleInitialUser() {
+      if (!initialUserId || !currentUser) return
+      
+      try {
+        setLoading(true)
+        // Check if user is already in our list (which is fetched below)
+        // But for speed, let's just fetch them directly first
+        const userToSelect = await usersAPI.getUser(initialUserId)
+        
+        if (userToSelect) {
+          setSelectedUser(userToSelect)
+          // We'll ensure they are in the list when the main fetch happens
+          // or we can optimistically add them here:
+          setUsers(prev => {
+             if (prev.some(u => u.id === userToSelect.id)) return prev
+             return [userToSelect, ...prev]
+          })
+        }
+      } catch (error) {
+        console.error("Failed to fetch initial user:", error)
+        toast.error("User not found")
+      } finally {
+        setLoading(false)
+      }
+    }
+    
+    // Only run this once on mount/initial load
+    handleInitialUser()
+  }, [initialUserId, currentUser])
+
   // Fetch conversations and users
   useEffect(() => {
     async function fetchData() {
@@ -38,21 +74,32 @@ export default function MessagesPage() {
           usersAPI.listUsers().catch(() => [])
         ])
 
-        // If we have conversations, show them. Otherwise show all users to start.
-        if (conversations.length > 0) {
-          // Conversations have { user, last_message, ... } we just need the user object for the list
-          // But wait, the list usually needs the whole conversation object to show unread counts etc.
-          // Let's rely on conversations for the main view, but if emptry, maybe show suggestions?
-          // Actually, the user wants to SEARCH.
+        // If we have conversations, show them
+         if (conversations.length > 0) {
           const convUsers = conversations.map((c: any) => ({
             ...c.user, 
-            // attach conversation meta if needed, or just look it up later
             conversationMeta: c
           }))
-          setUsers(convUsers)
+          
+          setUsers(prev => {
+            // merge with any currently selected user (like from URL)
+            const existingIds = new Set(convUsers.map((u: UserType) => u.id))
+            const newUsers = [...convUsers]
+            
+            // If we have a selected user from URL who isn't in conversations yet, keep them!
+            if (selectedUser && !existingIds.has(selectedUser.id)) {
+               newUsers.unshift(selectedUser)
+            }
+            return newUsers
+          })
         } else {
-           // No conversations, show all users so they can start one
-           setUsers(allUsers)
+           // No conversations, show all users
+           // But if we have a selected user from URL, make sure they are at the top
+           if (selectedUser && !allUsers.some((u: UserType) => u.id === selectedUser.id)) {
+              setUsers([selectedUser, ...allUsers]) 
+           } else {
+              setUsers(allUsers)
+           }
         }
       } catch (error) {
         console.error("Failed to fetch data:", error)
@@ -62,7 +109,9 @@ export default function MessagesPage() {
       }
     }
     if (currentUser) fetchData()
-  }, [currentUser])
+  }, [currentUser]) 
+  // removed selectedUser from dependency to avoid loop, handled inside logic
+
 
   // Search effect
   useEffect(() => {

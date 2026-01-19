@@ -19,7 +19,7 @@ export interface Item {
   category: string
   location: string
   date_lost_found: string
-  status: "active" | "claimed" | "returned"
+  status: "active" | "claimed" | "returned" | "closed"
   tags: string[]
   images: string[]
   user_id: string

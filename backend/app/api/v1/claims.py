@@ -3,8 +3,9 @@ from typing import List
 from uuid import UUID
 
 from app.schemas.claim import ClaimCreate, ClaimResponse, ClaimUpdate, ClaimList
-from app.repositories import ClaimRepository, ItemRepository
-from app.dependencies import get_claim_repository, get_item_repository
+from app.repositories import ClaimRepository, ItemRepository, NotificationRepository
+from app.dependencies import get_claim_repository, get_item_repository, get_notification_repository
+from app.repositories.notification import NotificationCreate
 from app.api.deps import get_current_active_user, get_current_admin
 from app.models.user import User
 
@@ -16,7 +17,8 @@ async def create_claim(
     claim_data: ClaimCreate,
     current_user: User = Depends(get_current_active_user),
     claim_repo: ClaimRepository = Depends(get_claim_repository),
-    item_repo: ItemRepository = Depends(get_item_repository)
+    item_repo: ItemRepository = Depends(get_item_repository),
+    notification_repo: NotificationRepository = Depends(get_notification_repository)
 ):
     """Submit a claim for an item"""
     # Verify item exists
@@ -52,7 +54,19 @@ async def create_claim(
     
     claim = await claim_repo.create(ClaimCreateDB(**claim_dict))
     
-    # TODO: Send notification to item owner
+    # Send notification to item owner
+    try:
+        notification = NotificationCreate(
+            user_id=item.user_id,
+            type="claim",
+            title="New Claim Received",
+            message=f"{current_user.full_name} has claimed your item: {item.title}",
+            link=f"/items/{item.id}"
+        )
+        await notification_repo.create(notification)
+    except Exception as e:
+        # Log error but don't fail the request
+        print(f"Failed to send notification: {e}")
     
     return claim
 

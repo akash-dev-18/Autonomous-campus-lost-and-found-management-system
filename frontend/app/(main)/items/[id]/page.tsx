@@ -18,6 +18,7 @@ import {
   ClipboardCheck,
   Sparkles,
   Loader2,
+  CheckCheck,
 } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -41,7 +42,6 @@ import { itemsAPI, matchesAPI, claimsAPI } from "@/lib/api"
 import type { Item, Match } from "@/lib/types"
 import { useAuth } from "@/context/auth-context"
 import { cn } from "@/lib/utils"
-import { ItemCard } from "@/components/features/item-card"
 
 export default function ItemDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -66,8 +66,9 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
           itemsAPI.getItems({ limit: 20 }),
         ])
         setItem(itemData)
-        setMatches(Array.isArray(matchesData) ? matchesData : matchesData.matches || [])
-        
+        const matchesResponse = matchesData as any
+        setMatches(Array.isArray(matchesResponse) ? matchesResponse : matchesResponse.matches || [])
+         
         // Filter similar items by category
         const similar = allItems.items
           .filter((i) => i.id !== id && i.category === itemData.category)
@@ -83,12 +84,37 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
     fetchItemData()
   }, [id])
 
+  const [claimImages, setClaimImages] = useState<string[]>([])
+
+  const handleClaimImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files) return
+
+    Array.from(files).forEach((file) => {
+      if (claimImages.length >= 3) {
+        toast.error("Maximum 3 proof images allowed")
+        return
+      }
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        const result = e.target?.result as string
+        setClaimImages((prev) => [...prev, result])
+      }
+      reader.readAsDataURL(file)
+    })
+  }
+
+  const handleRemoveClaimImage = (index: number) => {
+    setClaimImages((prev) => prev.filter((_, i) => i !== index))
+  }
+
   const handleClaim = async () => {
     try {
       await claimsAPI.createClaim({
         item_id: id,
         verification_answers: {
           description: claimDescription,
+          proof_images: claimImages,
           ...(verificationKey && verificationValue 
             ? { [verificationKey]: verificationValue }
             : {})
@@ -99,6 +125,7 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
       setClaimDescription("")
       setVerificationKey("")
       setVerificationValue("")
+      setClaimImages([])
     } catch (error) {
       toast.error("Failed to submit claim")
     }
@@ -335,59 +362,118 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
             </CardHeader>
             <CardContent className="space-y-3">
               {!isOwner && item.status === "active" && (
-                <Dialog open={claimDialogOpen} onOpenChange={setClaimDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button className="w-full">
-                      <ClipboardCheck className="mr-2 h-4 w-4" />
-                      Claim This Item
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Claim Item</DialogTitle>
-                      <DialogDescription>
-                        Please provide details to verify your ownership of this item.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4 py-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="claim-description">
-                          How can you prove this is yours?
-                        </Label>
-                        <Textarea
-                          id="claim-description"
-                          placeholder="Describe unique features or provide proof of ownership..."
-                          value={claimDescription}
-                          onChange={(e) => setClaimDescription(e.target.value)}
-                          rows={4}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Verification Details (optional)</Label>
-                        <div className="flex gap-2">
-                          <Input
-                            placeholder="e.g., Serial number"
-                            value={verificationKey}
-                            onChange={(e) => setVerificationKey(e.target.value)}
-                          />
-                          <Input
-                            placeholder="Value"
-                            value={verificationValue}
-                            onChange={(e) => setVerificationValue(e.target.value)}
-                          />
+                <>
+                  {item.type === "found" ? (
+                    <Dialog open={claimDialogOpen} onOpenChange={setClaimDialogOpen}>
+                      <DialogTrigger asChild>
+                        <Button className="w-full">
+                          <ClipboardCheck className="mr-2 h-4 w-4" />
+                          Claim This Item
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-md">
+                        <DialogHeader>
+                          <DialogTitle>Claim Item</DialogTitle>
+                          <DialogDescription>
+                            Please provide details to verify your ownership of this item.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 py-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="claim-description">
+                              How can you prove this is yours? *
+                            </Label>
+                            <Textarea
+                              id="claim-description"
+                              placeholder="Describe unique features or provide proof of ownership..."
+                              value={claimDescription}
+                              onChange={(e) => setClaimDescription(e.target.value)}
+                              rows={3}
+                            />
+                          </div>
+                          
+                          {/* Image Upload for Proof */}
+                          <div className="space-y-2">
+                            <Label>Proof Images (optional)</Label>
+                            <div className="space-y-3">
+                              {claimImages.length > 0 && (
+                                <div className="grid grid-cols-3 gap-2">
+                                  {claimImages.map((image, index) => (
+                                    <div
+                                      key={index}
+                                      className="group relative aspect-square overflow-hidden rounded-md border border-border"
+                                    >
+                                      <Image
+                                        src={image}
+                                        alt={`Proof ${index + 1}`}
+                                        fill
+                                        className="object-cover"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemoveClaimImage(index)}
+                                        className="absolute right-1 top-1 rounded-full bg-destructive/90 p-1 text-destructive-foreground opacity-100 transition-opacity hover:bg-destructive"
+                                      >
+                                        <Trash2 className="h-3 w-3" />
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {claimImages.length < 3 && (
+                                <label className="flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-border p-4 transition-colors hover:border-primary/50 hover:bg-accent/50">
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    multiple
+                                    onChange={handleClaimImageUpload}
+                                    className="sr-only"
+                                  />
+                                   <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                                     <Sparkles className="h-4 w-4" />
+                                     Upload Proof Image
+                                   </span>
+                                </label>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label>Verification Details (optional)</Label>
+                            <div className="flex gap-2">
+                              <Input
+                                placeholder="e.g., Serial number"
+                                value={verificationKey}
+                                onChange={(e) => setVerificationKey(e.target.value)}
+                              />
+                              <Input
+                                placeholder="Value"
+                                value={verificationValue}
+                                onChange={(e) => setVerificationValue(e.target.value)}
+                              />
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                    <DialogFooter>
-                      <Button variant="outline" onClick={() => setClaimDialogOpen(false)}>
-                        Cancel
-                      </Button>
-                      <Button onClick={handleClaim} disabled={!claimDescription}>
-                        Submit Claim
-                      </Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
+                        <DialogFooter>
+                          <Button variant="outline" onClick={() => setClaimDialogOpen(false)}>
+                            Cancel
+                          </Button>
+                          <Button onClick={handleClaim} disabled={!claimDescription}>
+                            Submit Claim
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                  ) : (
+                    <Button className="w-full bg-primary hover:bg-primary/90" asChild>
+                      <Link href={`/messages?user=${item.user_id}`}>
+                         <Sparkles className="mr-2 h-4 w-4" />
+                         I Found This!
+                      </Link>
+                    </Button>
+                  )}
+                </>
               )}
 
               {!isOwner && (
@@ -401,6 +487,28 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
 
               {isOwner && (
                 <>
+                  {item.status === "active" && (
+                    <Button
+                      variant="outline"
+                      className="w-full bg-success/10 text-success hover:bg-success/20 border-success/20"
+                      onClick={async () => {
+                        try {
+                          await itemsAPI.updateItem(id, { status: "closed" })
+                          toast.success("Item resolved! Redirecting...")
+                          router.refresh()
+                          setTimeout(() => {
+                            router.push("/items")
+                          }, 1000)
+                        } catch (error) {
+                          toast.error("Failed to update item status")
+                        }
+                      }}
+                    >
+                      <CheckCheck className="mr-2 h-4 w-4" />
+                      Mark as Resolved
+                    </Button>
+                  )}
+                  
                   <Button variant="outline" className="w-full bg-transparent" asChild>
                     <Link href={`/items/${id}/edit`}>
                       <Edit className="mr-2 h-4 w-4" />

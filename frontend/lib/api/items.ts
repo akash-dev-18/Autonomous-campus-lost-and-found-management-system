@@ -49,4 +49,8 @@ export const itemsAPI = {
   async uploadImage(itemId: string, file: File): Promise<{ image_url: string }> {
     return api.uploadFile(`/api/v1/items/${itemId}/upload-image`, file)
   },
+
+  async getMyItems(): Promise<Item[]> {
+    return api.get<Item[]>('/api/v1/items/user/me')
+  },
 }
