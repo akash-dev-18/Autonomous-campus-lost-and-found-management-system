@@ -92,19 +92,14 @@ def calculate_similarity(lost_item_data: dict, found_item_data: dict) -> float:
     # CLIP AI Matching (Image-Text & Image-Image)
     try:
         import torch
-        from transformers import CLIPProcessor, CLIPModel
-        from PIL import Image
+        from app.services.ai_model import ai_service
         import requests
+        from PIL import Image
         from io import BytesIO
 
-        # Simple caching for model (in a real worker, this persists)
-        if not hasattr(calculate_similarity, "model"):
-             print("Loading CLIP Model (this happens once)...")
-             calculate_similarity.model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-             calculate_similarity.processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
-
-        model = calculate_similarity.model
-        processor = calculate_similarity.processor
+        # Ensure model is loaded
+        if not ai_service.model:
+            pass # Skipping if model failed to load or not installed
 
         # Helpers
         def load_image(url_or_path):
@@ -127,33 +122,28 @@ def calculate_similarity(lost_item_data: dict, found_item_data: dict) -> float:
         clip_score = 0.0
         
         # Case 1: Image <-> Image
-        if lost_image and found_image:
-            inputs = processor(images=[lost_image, found_image], return_tensors="pt", padding=True)
-            outputs = model.get_image_features(**inputs)
+        if lost_image and found_image and ai_service.model:
+            inputs = ai_service.processor(images=[lost_image, found_image], return_tensors="pt", padding=True)
+            with torch.no_grad():
+                outputs = ai_service.model.get_image_features(**inputs)
+            
             # Cosine similarity between two image vectors
             cos = torch.nn.CosineSimilarity(dim=1, eps=1e-6)
             clip_score = cos(outputs[0].unsqueeze(0), outputs[1].unsqueeze(0)).item()
             score += clip_score * 0.4  # Big boost if images match
             
         # Case 2: Image <-> Text (Multimodal)
-        elif lost_image or found_image:
+        elif (lost_image or found_image) and ai_service.model:
             # One has image, match with other's text
             image_input = lost_image or found_image
             text_input = found_text_full if lost_image else lost_text_full
             # Truncate text to fit context window
             text_input = text_input[:77] 
             
-            inputs = processor(text=[text_input], images=image_input, return_tensors="pt", padding=True)
-            outputs = model(**inputs)
-            # Logits per image is the similarity score
-            logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
-            probs = logits_per_image.softmax(dim=1) # softmax to get probability
-            # CLIP raw scores are logits, usually high. We can normalize or use raw cosine if we extracted features manually.
-            # Let's use the raw logit divided by 100 as a rough heuristic or just extract features manually for cosine.
-            
-            # Better way: Get features and cosine
-            img_embed = model.get_image_features(pixel_values=inputs['pixel_values'])
-            text_embed = model.get_text_features(input_ids=inputs['input_ids'], attention_mask=inputs['attention_mask'])
+            inputs = ai_service.processor(text=[text_input], images=image_input, return_tensors="pt", padding=True)
+            with torch.no_grad():
+                img_embed = ai_service.model.get_image_features(pixel_values=inputs['pixel_values'])
+                text_embed = ai_service.model.get_text_features(input_ids=inputs['input_ids'], attention_mask=inputs['attention_mask'])
             
             cos = torch.nn.CosineSimilarity(dim=1, eps=1e-6)
             clip_score = cos(img_embed, text_embed).item()

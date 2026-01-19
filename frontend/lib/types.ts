@@ -18,6 +18,7 @@ export interface Item {
   description: string
   category: string
   location: string
+  location_found?: string
   date_lost_found: string
   status: "active" | "claimed" | "returned" | "closed"
   tags: string[]

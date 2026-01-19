@@ -126,6 +126,7 @@ from app.api.v1 import (
     claims,
     messages,
     notifications,
+    ai,
 )
 from app.websocket import routes as websocket_routes
 
@@ -137,6 +138,7 @@ app.include_router(matches.router, prefix="/api/v1/matches", tags=["Matches"])
 app.include_router(claims.router, prefix="/api/v1/claims", tags=["Claims"])
 app.include_router(messages.router, prefix="/api/v1/messages", tags=["Messages"])
 app.include_router(notifications.router, prefix="/api/v1/notifications", tags=["Notifications"])
+app.include_router(ai.router, prefix="/api/v1/ai", tags=["AI"])
 app.include_router(websocket_routes.router, prefix="/api/v1", tags=["WebSocket"])
 
 

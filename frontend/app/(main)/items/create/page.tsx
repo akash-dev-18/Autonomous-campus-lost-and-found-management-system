@@ -1,13 +1,9 @@
 "use client"
 
-import React from "react"
-import { Suspense } from "react"
-import Loading from "./loading"
-
-import { useState } from "react"
+import React, { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, Upload, X, Loader2, ImageIcon } from "lucide-react"
+import { ArrowLeft, Upload, X, Loader2, ImageIcon, Wand2 } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -26,6 +22,9 @@ import { Badge } from "@/components/ui/badge"
 import { CATEGORIES } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { itemsAPI } from "@/lib/api"
+import { aiAPI } from "@/lib/api/ai"
+import { Suspense } from "react"
+import Loading from "./loading"
 
 export default function CreateItemPage() {
   const router = useRouter()
@@ -96,23 +95,65 @@ export default function CreateItemPage() {
     })
   }
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
-    if (!files) return
+    if (!files || files.length === 0) return
 
-    // Simulate image upload - in production, this would upload to S3/Vercel Blob
-    Array.from(files).forEach((file) => {
-      if (images.length >= 5) {
-        toast.error("Maximum 5 images allowed")
-        return
-      }
+    // Limit to 5 images total
+    if (images.length + files.length > 5) {
+      toast.error("Maximum 5 images allowed")
+      return
+    }
+
+    const newImages: string[] = []
+    const fileArray = Array.from(files)
+
+    // Process all images for preview
+    for (const file of fileArray) {
       const reader = new FileReader()
-      reader.onload = (e) => {
-        const result = e.target?.result as string
-        setImages((prev) => [...prev, result])
+      await new Promise<void>((resolve) => {
+        reader.onload = (e) => {
+          if (e.target?.result) newImages.push(e.target.result as string)
+          resolve()
+        }
+        reader.readAsDataURL(file)
+      })
+    }
+    setImages((prev) => [...prev, ...newImages])
+
+    // Trigger AI Analysis on the FIRST uploaded file
+    const fileToAnalyze = fileArray[0]
+    if (fileToAnalyze) {
+      try {
+        toast.info("AI is analyzing your image...", { icon: <Wand2 className="h-4 w-4 animate-spin"/> })
+        
+        const result = await aiAPI.analyzeImage(fileToAnalyze)
+        
+        // Auto-select category if not set or if confidence is high
+        if (!formData.category || result.confidence > 0.4) {
+             // Find exact match in CATEGORIES (case sensitive check just in case)
+             const matchedCategory = CATEGORIES.find(c => c.toLowerCase() === result.category.toLowerCase()) || "Other"
+             setFormData(prev => ({ ...prev, category: matchedCategory }))
+        }
+        
+        // Add suggested tags (avoid duplicates)
+        if (result.tags.length > 0) {
+           setFormData(prev => {
+             const newTags = [...prev.tags]
+             result.tags.forEach(tag => {
+               if (!newTags.includes(tag.toLowerCase()) && newTags.length < 10) {
+                 newTags.push(tag.toLowerCase())
+               }
+             })
+             return { ...prev, tags: newTags }
+           })
+           toast.success(`Detected: ${result.category}`, { description: `Added tags: ${result.tags.join(", ")}` })
+        }
+        
+      } catch (error) {
+        console.error("AI Analysis failed:", error)
       }
-      reader.readAsDataURL(file)
-    })
+    }
   }
 
   const handleRemoveImage = (index: number) => {
@@ -121,7 +162,6 @@ export default function CreateItemPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      {/* Back Button */}
       <Button asChild variant="ghost" className="gap-2">
         <Link href="/items">
           <ArrowLeft className="h-4 w-4" />
@@ -141,10 +181,10 @@ export default function CreateItemPage() {
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Item Type */}
             <div className="space-y-3">
-              <Label>Item Type *</Label>
+              <div className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-50">Item Type *</div>
               <RadioGroup
                 value={formData.type}
-                onValueChange={(value) =>
+                onValueChange={(value: string) =>
                   setFormData({ ...formData, type: value as "lost" | "found" })
                 }
                 className="grid grid-cols-2 gap-4"
@@ -221,10 +261,10 @@ export default function CreateItemPage() {
 
             {/* Category */}
             <div className="space-y-2">
-              <Label htmlFor="category">Category *</Label>
+              <div className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-50">Category *</div>
               <Select
                 value={formData.category}
-                onValueChange={(value) => setFormData({ ...formData, category: value })}
+                onValueChange={(value: string) => setFormData({ ...formData, category: value })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select a category" />
