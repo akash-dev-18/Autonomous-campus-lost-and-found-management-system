@@ -195,6 +195,13 @@ export default function MessagesPage() {
     usersRef.current = users
   }, [users])
 
+  // Request Notification Permission on mount
+  useEffect(() => {
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission()
+    }
+  }, [])
+
   // Handle incoming WebSocket messages
   useEffect(() => {
     console.log('WS Messages updated:', wsMessages.length)
@@ -211,6 +218,13 @@ export default function MessagesPage() {
     const currentUsers = usersRef.current
     const userExists = currentUsers.some(u => u.id === otherUserId)
 
+    // Helper to send browser notification
+    const sendBrowserNotification = (title: string, body: string) => {
+      if ("Notification" in window && Notification.permission === "granted") {
+        new Notification(title, { body, icon: "/icon.png" })
+      }
+    }
+
     if (userExists) {
       // Notify if it's an incoming message from someone we aren't currently viewing
       if (!isFromMe && selectedUser?.id !== otherUserId) {
@@ -218,7 +232,14 @@ export default function MessagesPage() {
           u.id === otherUserId ? { ...u, hasUnread: true } : u
         ))
         const sender = currentUsers.find(u => u.id === otherUserId)
-        toast.info(`New message from ${sender?.full_name || 'User'}`)
+        const senderName = sender?.full_name || 'User'
+        
+        toast.info(`New message from ${senderName}`)
+        
+        // Browser Notification
+        if (document.hidden) {
+           sendBrowserNotification(`New message from ${senderName}`, lastMessage.content || "Sent an image")
+        }
       }
     } else {
       // New conversation started! Fetch user and add to list
@@ -237,6 +258,10 @@ export default function MessagesPage() {
           })
           if (!isFromMe) {
             toast.info(`New message from ${newUser.full_name}`)
+            // Browser Notification
+            if (document.hidden) {
+              sendBrowserNotification(`New message from ${newUser.full_name}`, lastMessage.content || "Sent an image")
+            }
           }
         } catch (error) {
           console.error('Failed to fetch new user:', error)
