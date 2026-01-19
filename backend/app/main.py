@@ -117,33 +117,48 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
+# API Routes
+from app.api.v1 import (
+    auth,
+    users,
+    items,
+    matches,
+    claims,
+    messages,
+    notifications,
+)
+from app.websocket import routes as websocket_routes
+
+# Include routers
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
+app.include_router(users.router, prefix="/api/v1/users", tags=["Users"])
+app.include_router(items.router, prefix="/api/v1/items", tags=["Items"])
+app.include_router(matches.router, prefix="/api/v1/matches", tags=["Matches"])
+app.include_router(claims.router, prefix="/api/v1/claims", tags=["Claims"])
+app.include_router(messages.router, prefix="/api/v1/messages", tags=["Messages"])
+app.include_router(notifications.router, prefix="/api/v1/notifications", tags=["Notifications"])
+app.include_router(websocket_routes.router, prefix="/api/v1", tags=["WebSocket"])
+
+
 # Health check endpoint
-@app.get("/health", tags=["Health"])
+@app.get("/health")
 async def health_check():
     """Health check endpoint"""
     return {
         "status": "healthy",
-        "app_name": settings.APP_NAME,
-        "version": settings.APP_VERSION,
         "environment": settings.ENVIRONMENT,
     }
 
 
 # Root endpoint
-@app.get("/", tags=["Root"])
+@app.get("/")
 async def root():
     """Root endpoint"""
     return {
-        "message": "Welcome to Lost and Found Management System API",
+        "message": "Lost and Found Management System API",
         "version": settings.APP_VERSION,
         "docs": "/docs" if settings.DEBUG else "Documentation disabled in production",
     }
-
-
-# Import and include routers
-from app.api.v1 import api_router
-
-app.include_router(api_router, prefix="/api/v1")
 
 
 if __name__ == "__main__":

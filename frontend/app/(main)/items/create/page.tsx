@@ -25,6 +25,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Badge } from "@/components/ui/badge"
 import { CATEGORIES } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import { itemsAPI } from "@/lib/api"
 
 export default function CreateItemPage() {
   const router = useRouter()
@@ -52,13 +53,29 @@ export default function CreateItemPage() {
 
     setIsSubmitting(true)
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1500))
+    try {
+      // Create item via API
+      await itemsAPI.createItem({
+        type: formData.type,
+        title: formData.title,
+        description: formData.description,
+        category: formData.category,
+        location_found: formData.location,
+        date_lost_found: formData.date_lost_found,
+        tags: formData.tags,
+        images: images,
+      })
 
-    toast.success(
-      `${formData.type === "lost" ? "Lost" : "Found"} item reported successfully! Our AI will search for matches.`
-    )
-    router.push("/items")
+      toast.success(
+        `${formData.type === "lost" ? "Lost" : "Found"} item reported successfully! Our AI will search for matches.`
+      )
+      router.push("/items")
+    } catch (error: any) {
+      console.error("Failed to create item:", error)
+      toast.error(error.message || "Failed to create item")
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const handleAddTag = (e: React.KeyboardEvent) => {

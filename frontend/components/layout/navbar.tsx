@@ -16,7 +16,6 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/context/auth-context"
-import { mockNotifications } from "@/lib/mock-data"
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard" },
@@ -30,7 +29,8 @@ export function Navbar() {
   const pathname = usePathname()
   const { user, logout } = useAuth()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const unreadNotifications = mockNotifications.filter((n) => !n.is_read).length
+  // TODO: Fetch notifications from API
+  const unreadNotifications = 0
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
@@ -85,20 +85,9 @@ export function Navbar() {
                 </Button>
               </div>
               <DropdownMenuSeparator />
-              {mockNotifications.slice(0, 5).map((notification) => (
-                <DropdownMenuItem
-                  key={notification.id}
-                  className={cn(
-                    "flex flex-col items-start gap-1 p-4",
-                    !notification.is_read && "bg-primary/5"
-                  )}
-                >
-                  <span className="text-sm">{notification.message}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {new Date(notification.created_at).toLocaleDateString()}
-                  </span>
-                </DropdownMenuItem>
-              ))}
+              <div className="p-4 text-center text-sm text-muted-foreground">
+                No notifications yet
+              </div>
             </DropdownMenuContent>
           </DropdownMenu>
 

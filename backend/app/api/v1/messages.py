@@ -38,6 +38,23 @@ async def send_message(
     return message
 
 
+@router.get("/conversations", response_model=List[dict])
+async def get_conversations(
+    current_user: User = Depends(get_current_active_user),
+    message_repo: MessageRepository = Depends(get_message_repository)
+):
+    """Get list of all conversations for current user"""
+    import logging
+    logger = logging.getLogger(__name__)
+    try:
+        # Get all unique users the current user has messaged with
+        conversations = await message_repo.get_conversations_list(current_user.id)
+        return conversations
+    except Exception as e:
+        logger.error(f"Error fetching conversations: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/conversations/{user_id}", response_model=List[MessageResponse])
 async def get_conversation(
     user_id: UUID,

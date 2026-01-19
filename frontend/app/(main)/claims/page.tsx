@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useMemo } from "react"
-import { ClipboardList, Clock, CheckCircle, XCircle } from "lucide-react"
+import { useState, useMemo, useEffect } from "react"
+import { ClipboardList, Clock, CheckCircle, XCircle, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -15,27 +15,53 @@ import {
 } from "@/components/ui/select"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ClaimCard } from "@/components/features/claim-card"
-import { mockClaims, currentUser, mockItems } from "@/lib/mock-data"
+import { claimsAPI, itemsAPI } from "@/lib/api"
+import type { Claim, Item } from "@/lib/types"
+import { useAuth } from "@/context/auth-context"
 
 type StatusFilter = "all" | "pending" | "approved" | "rejected" | "completed"
 type TabValue = "my-claims" | "received-claims"
 
 export default function ClaimsPage() {
+  const { user } = useAuth()
+  const [claims, setClaims] = useState<Claim[]>([])
+  const [myItems, setMyItems] = useState<Item[]>([])
+  const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<TabValue>("my-claims")
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
 
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        setLoading(true)
+        const [claimsData, itemsData] = await Promise.all([
+          claimsAPI.getClaims(),
+          itemsAPI.getItems({ user_id: user?.id }),
+        ])
+        setClaims(claimsData || [])
+        setMyItems(itemsData.items || [])
+      } catch (error) {
+        console.error("Failed to fetch claims:", error)
+        toast.error("Failed to load claims")
+      } finally {
+        setLoading(false)
+      }
+    }
+    if (user) fetchData()
+  }, [user])
+
   // Claims I made
-  const myClaims = mockClaims.filter((claim) => claim.claimer_id === currentUser.id)
+  const myClaims = claims.filter((claim) => claim.claimer_id === user?.id)
 
   // Claims on my items
-  const myItemIds = mockItems.filter((item) => item.user_id === currentUser.id).map((i) => i.id)
-  const receivedClaims = mockClaims.filter((claim) => myItemIds.includes(claim.item_id))
+  const myItemIds = myItems.map((i) => i.id)
+  const receivedClaims = claims.filter((claim) => myItemIds.includes(claim.item_id))
 
   const filteredClaims = useMemo(() => {
-    const claims = activeTab === "my-claims" ? myClaims : receivedClaims
+    const claimsList = activeTab === "my-claims" ? myClaims : receivedClaims
 
-    if (statusFilter === "all") return claims
-    return claims.filter((claim) => claim.status === statusFilter)
+    if (statusFilter === "all") return claimsList
+    return claimsList.filter((claim) => claim.status === statusFilter)
   }, [activeTab, statusFilter, myClaims, receivedClaims])
 
   const stats = {
@@ -55,12 +81,28 @@ export default function ClaimsPage() {
 
   const currentStats = activeTab === "my-claims" ? stats.myClaims : stats.received
 
-  const handleApprove = (claimId: string) => {
-    toast.success("Claim approved! The claimer has been notified.")
+  const handleApprove = async (claimId: string) => {
+    try {
+      await claimsAPI.updateClaimStatus(claimId, "approved")
+      toast.success("Claim approved! The claimer has been notified.")
+      // Refresh claims
+      const updated = await claimsAPI.getClaims()
+      setClaims(updated || [])
+    } catch (error) {
+      toast.error("Failed to approve claim")
+    }
   }
 
-  const handleReject = (claimId: string) => {
-    toast.info("Claim rejected. The claimer has been notified.")
+  const handleReject = async (claimId: string) => {
+    try {
+      await claimsAPI.updateClaimStatus(claimId, "rejected")
+      toast.info("Claim rejected. The claimer has been notified.")
+      // Refresh claims
+      const updated = await claimsAPI.getClaims()
+      setClaims(updated || [])
+    } catch (error) {
+      toast.error("Failed to reject claim")
+    }
   }
 
   return (
@@ -172,7 +214,11 @@ export default function ClaimsPage() {
 
         {/* Claims List */}
         <TabsContent value="my-claims" className="mt-6">
-          {filteredClaims.length > 0 ? (
+          {loading ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : filteredClaims.length > 0 ? (
             <div className="grid gap-6 md:grid-cols-2">
               {filteredClaims.map((claim) => (
                 <ClaimCard key={claim.id} claim={claim} isOwner={false} />
@@ -203,7 +249,11 @@ export default function ClaimsPage() {
         </TabsContent>
 
         <TabsContent value="received-claims" className="mt-6">
-          {filteredClaims.length > 0 ? (
+          {loading ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : filteredClaims.length > 0 ? (
             <div className="grid gap-6 md:grid-cols-2">
               {filteredClaims.map((claim) => (
                 <ClaimCard

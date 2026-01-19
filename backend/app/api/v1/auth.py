@@ -56,6 +56,8 @@ async def register(
         full_name: str
         student_id: str | None = None
         phone: str | None = None
+        is_active: bool = True
+        is_verified: bool = True  # Auto-verify for now, TODO: implement email verification
     
     user = await user_repo.create(UserCreateDB(**user_dict))
     

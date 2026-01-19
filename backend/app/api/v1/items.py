@@ -24,8 +24,7 @@ async def create_item(
     - **type**: lost or found
     - **title**: Item title
     - **description**: Detailed description
-    - **category**: Item category (electronics, documents, etc.)
-    - **location_found**: Where the item was lost/found
+    - **category**: Item category (electronics, documents, etc.)\n    - **location_found**: Where the item was lost/found
     - **date_lost_found**: Date when item was lost/found
     """
     # Add user_id to item data
@@ -51,75 +50,6 @@ async def create_item(
     # TODO: Trigger matching algorithm in background
     
     return item
-
-
-@router.get("/{item_id}", response_model=ItemResponse)
-async def get_item(
-    item_id: UUID,
-    item_repo: ItemRepository = Depends(get_item_repository)
-):
-    """Get item by ID"""
-    item = await item_repo.get(item_id)
-    if not item:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Item not found"
-        )
-    return item
-
-
-@router.put("/{item_id}", response_model=ItemResponse)
-async def update_item(
-    item_id: UUID,
-    item_update: ItemUpdate,
-    current_user: User = Depends(get_current_active_user),
-    item_repo: ItemRepository = Depends(get_item_repository)
-):
-    """Update an item (only by owner)"""
-    # Get item
-    item = await item_repo.get(item_id)
-    if not item:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Item not found"
-        )
-    
-    # Check ownership
-    if item.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to update this item"
-        )
-    
-    # Update item
-    updated_item = await item_repo.update(item_id, item_update)
-    return updated_item
-
-
-@router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_item(
-    item_id: UUID,
-    current_user: User = Depends(get_current_active_user),
-    item_repo: ItemRepository = Depends(get_item_repository)
-):
-    """Delete an item (only by owner)"""
-    # Get item
-    item = await item_repo.get(item_id)
-    if not item:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Item not found"
-        )
-    
-    # Check ownership
-    if item.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to delete this item"
-        )
-    
-    # Delete item
-    await item_repo.delete(item_id)
 
 
 @router.get("/", response_model=ItemList)
@@ -198,3 +128,72 @@ async def get_my_items(
     """Get all items posted by current user"""
     items = await item_repo.get_by_user(current_user.id)
     return items
+
+
+@router.get("/{item_id}", response_model=ItemResponse)
+async def get_item(
+    item_id: UUID,
+    item_repo: ItemRepository = Depends(get_item_repository)
+):
+    """Get item by ID"""
+    item = await item_repo.get(item_id)
+    if not item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Item not found"
+        )
+    return item
+
+
+@router.put("/{item_id}", response_model=ItemResponse)
+async def update_item(
+    item_id: UUID,
+    item_update: ItemUpdate,
+    current_user: User = Depends(get_current_active_user),
+    item_repo: ItemRepository = Depends(get_item_repository)
+):
+    """Update an item (only by owner)"""
+    # Get item
+    item = await item_repo.get(item_id)
+    if not item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Item not found"
+        )
+    
+    # Check ownership
+    if item.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to update this item"
+        )
+    
+    # Update item
+    updated_item = await item_repo.update(item_id, item_update)
+    return updated_item
+
+
+@router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_item(
+    item_id: UUID,
+    current_user: User = Depends(get_current_active_user),
+    item_repo: ItemRepository = Depends(get_item_repository)
+):
+    """Delete an item (only by owner)"""
+    # Get item
+    item = await item_repo.get(item_id)
+    if not item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Item not found"
+        )
+    
+    # Check ownership
+    if item.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to delete this item"
+        )
+    
+    # Delete item
+    await item_repo.delete(item_id)

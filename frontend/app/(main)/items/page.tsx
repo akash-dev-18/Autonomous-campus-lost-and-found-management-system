@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import Link from "next/link"
-import { Search, SlidersHorizontal, LayoutGrid, List, Plus, X } from "lucide-react"
+import { Search, SlidersHorizontal, LayoutGrid, List, Plus, X, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -24,17 +24,21 @@ import {
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ItemCard } from "@/components/features/item-card"
-import { mockItems } from "@/lib/mock-data"
+import { itemsAPI } from "@/lib/api"
+import type { Item } from "@/lib/types"
 import { CATEGORIES } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { useSearchParams } from "next/navigation"
 import { Suspense } from "react"
+import { toast } from "sonner"
 
 type ViewMode = "grid" | "list"
 type ItemType = "all" | "lost" | "found"
 type ItemStatus = "all" | "active" | "claimed" | "returned"
 
 export default function ItemsPage() {
+  const [items, setItems] = useState<Item[]>([])
+  const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [viewMode, setViewMode] = useState<ViewMode>("grid")
   const [typeFilter, setTypeFilter] = useState<ItemType>("all")
@@ -43,13 +47,35 @@ export default function ItemsPage() {
   const [sortBy, setSortBy] = useState("newest")
   const searchParams = useSearchParams()
 
+  // Fetch items from API
+  useEffect(() => {
+    async function fetchItems() {
+      try {
+        setLoading(true)
+        const response = await itemsAPI.getItems({
+          type: typeFilter !== "all" ? typeFilter : undefined,
+          status: statusFilter !== "all" ? statusFilter : undefined,
+          category: categoryFilter !== "all" ? categoryFilter : undefined,
+        })
+        setItems(response.items || [])
+      } catch (error) {
+        console.error("Failed to fetch items:", error)
+        toast.error("Failed to load items")
+        setItems([])
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchItems()
+  }, [typeFilter, statusFilter, categoryFilter])
+
   const filteredItems = useMemo(() => {
-    let items = [...mockItems]
+    let filtered = [...items]
 
     // Search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase()
-      items = items.filter(
+      filtered = filtered.filter(
         (item) =>
           item.title.toLowerCase().includes(query) ||
           item.description.toLowerCase().includes(query) ||
@@ -58,23 +84,8 @@ export default function ItemsPage() {
       )
     }
 
-    // Type filter
-    if (typeFilter !== "all") {
-      items = items.filter((item) => item.type === typeFilter)
-    }
-
-    // Status filter
-    if (statusFilter !== "all") {
-      items = items.filter((item) => item.status === statusFilter)
-    }
-
-    // Category filter
-    if (categoryFilter !== "all") {
-      items = items.filter((item) => item.category === categoryFilter)
-    }
-
     // Sort
-    items.sort((a, b) => {
+    filtered.sort((a, b) => {
       switch (sortBy) {
         case "newest":
           return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
@@ -87,8 +98,8 @@ export default function ItemsPage() {
       }
     })
 
-    return items
-  }, [searchQuery, typeFilter, statusFilter, categoryFilter, sortBy])
+    return filtered
+  }, [items, searchQuery, sortBy])
 
   const activeFiltersCount = [
     typeFilter !== "all",
@@ -315,8 +326,12 @@ export default function ItemsPage() {
           Showing {filteredItems.length} {filteredItems.length === 1 ? "item" : "items"}
         </p>
 
-        {/* Items Grid/List */}
-        {filteredItems.length > 0 ? (
+        {/* Loading State */}
+        {loading ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : filteredItems.length > 0 ? (
           <div
             className={cn(
               viewMode === "grid"

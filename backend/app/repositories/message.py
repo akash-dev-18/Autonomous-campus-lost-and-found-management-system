@@ -137,3 +137,61 @@ class MessageRepository(BaseCRUD[Message, MessageCreate, MessageUpdate]):
                 }
         
         return list(conversations.values())[:limit]
+    
+    async def get_conversations_list(self, user_id: UUID) -> List[dict]:
+        """
+        Get list of all conversations with user details for Messages page.
+        
+        Args:
+            user_id: Current user UUID
+            
+        Returns:
+            List of conversations with user info and last message
+        """
+        from app.models.user import User
+        
+        # Get all messages involving this user
+        stmt = select(Message).where(
+            or_(Message.sender_id == user_id, Message.receiver_id == user_id)
+        ).order_by(Message.created_at.desc())
+        
+        result = await self.db.execute(stmt)
+        all_messages = list(result.scalars().all())
+        
+        # Group by conversation partner
+        conversations_dict = {}
+        for msg in all_messages:
+            partner_id = msg.receiver_id if msg.sender_id == user_id else msg.sender_id
+            
+            if partner_id not in conversations_dict:
+                # Get user details
+                user_stmt = select(User).where(User.id == partner_id)
+                user_result = await self.db.execute(user_stmt)
+                partner = user_result.scalar_one_or_none()
+                
+                if partner:
+                    conversations_dict[partner_id] = {
+                        "user": {
+                            "id": str(partner.id),
+                            "full_name": partner.full_name,
+                            "email": partner.email,
+                            "avatar": getattr(partner, "avatar", None)
+                        },
+                        "last_message": msg.content,
+                        "last_message_at": msg.created_at.isoformat(),
+                        "unread_count": 0  # Will calculate below
+                    }
+        
+        # Calculate unread counts
+        for partner_id, conv in conversations_dict.items():
+            unread_stmt = select(func.count()).select_from(Message).where(
+                and_(
+                    Message.sender_id == partner_id,
+                    Message.receiver_id == user_id,
+                    Message.is_read == False
+                )
+            )
+            unread_result = await self.db.execute(unread_stmt)
+            conv["unread_count"] = unread_result.scalar() or 0
+        
+        return list(conversations_dict.values())

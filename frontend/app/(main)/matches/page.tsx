@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useMemo } from "react"
-import { Sparkles, Filter, SlidersHorizontal } from "lucide-react"
+import { useState, useMemo, useEffect } from "react"
+import { Sparkles, Filter, SlidersHorizontal, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -13,20 +13,41 @@ import {
 } from "@/components/ui/select"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { MatchCard } from "@/components/features/match-card"
-import { mockMatches } from "@/lib/mock-data"
+import { matchesAPI } from "@/lib/api"
+import type { Match } from "@/lib/types"
+import { toast } from "sonner"
 
 type ConfidenceFilter = "all" | "high" | "medium" | "low"
 
 export default function MatchesPage() {
+  const [matches, setMatches] = useState<Match[]>([])
+  const [loading, setLoading] = useState(true)
   const [confidenceFilter, setConfidenceFilter] = useState<ConfidenceFilter>("all")
   const [sortBy, setSortBy] = useState("score")
 
+  useEffect(() => {
+    async function fetchMatches() {
+      try {
+        setLoading(true)
+        const response = await matchesAPI.getMyMatches()
+        setMatches(Array.isArray(response) ? response : response.matches || [])
+      } catch (error) {
+        console.error("Failed to fetch matches:", error)
+        toast.error("Failed to load matches")
+        setMatches([])
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchMatches()
+  }, [])
+
   const filteredMatches = useMemo(() => {
-    let matches = [...mockMatches]
+    let filtered = [...matches]
 
     // Confidence filter
     if (confidenceFilter !== "all") {
-      matches = matches.filter((match) => {
+      filtered = filtered.filter((match) => {
         const score = match.similarity_score * 100
         switch (confidenceFilter) {
           case "high":
@@ -42,7 +63,7 @@ export default function MatchesPage() {
     }
 
     // Sort
-    matches.sort((a, b) => {
+    filtered.sort((a, b) => {
       switch (sortBy) {
         case "score":
           return b.similarity_score - a.similarity_score
@@ -55,15 +76,14 @@ export default function MatchesPage() {
       }
     })
 
-    return matches
-  }, [confidenceFilter, sortBy])
+    return filtered
+  }, [matches, confidenceFilter, sortBy])
 
   const stats = {
-    total: mockMatches.length,
-    high: mockMatches.filter((m) => m.similarity_score >= 0.8).length,
-    medium: mockMatches.filter((m) => m.similarity_score >= 0.5 && m.similarity_score < 0.8)
-      .length,
-    low: mockMatches.filter((m) => m.similarity_score < 0.5).length,
+    total: matches.length,
+    high: matches.filter((m) => m.similarity_score >= 0.8).length,
+    medium: matches.filter((m) => m.similarity_score >= 0.5 && m.similarity_score < 0.8).length,
+    low: matches.filter((m) => m.similarity_score < 0.5).length,
   }
 
   return (
@@ -183,7 +203,11 @@ export default function MatchesPage() {
       </p>
 
       {/* Matches Grid */}
-      {filteredMatches.length > 0 ? (
+      {loading ? (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      ) : filteredMatches.length > 0 ? (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {filteredMatches.map((match) => (
             <MatchCard key={match.id} match={match} />

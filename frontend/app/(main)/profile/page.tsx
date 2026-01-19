@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { User, Mail, Phone, Award as IdCard, Calendar, Star, Package, Award, Settings, Camera, Loader2, Bell, Shield, Trash2 } from "lucide-react"
@@ -23,11 +23,14 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { useAuth } from "@/context/auth-context"
-import { mockItems } from "@/lib/mock-data"
+import { itemsAPI, usersAPI } from "@/lib/api"
+import type { Item } from "@/lib/types"
 import { ItemCard } from "@/components/features/item-card"
 
 export default function ProfilePage() {
   const { user, logout } = useAuth()
+  const [myItems, setMyItems] = useState<Item[]>([])
+  const [loading, setLoading] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [formData, setFormData] = useState({
@@ -43,11 +46,25 @@ export default function ProfilePage() {
     messages: true,
   })
 
-  const myItems = mockItems.filter((item) => item.user_id === "user-1")
+  useEffect(() => {
+    async function fetchUserItems() {
+      try {
+        setLoading(true)
+        const response = await itemsAPI.getItems()
+        const userItems = response.items.filter((item) => item.user_id === user?.id)
+        setMyItems(userItems)
+      } catch (error) {
+        console.error("Failed to fetch items:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    if (user) fetchUserItems()
+  }, [user])
 
   const stats = {
     itemsReported: myItems.length,
-    itemsReturned: mockItems.filter((i) => i.status === "returned" && i.user_id === "user-1").length,
+    itemsReturned: myItems.filter((i) => i.status === "returned").length,
     reputationScore: user?.reputation_score || 0,
     memberSince: user?.created_at
       ? new Date(user.created_at).toLocaleDateString("en-US", {
@@ -58,11 +75,16 @@ export default function ProfilePage() {
   }
 
   const handleSave = async () => {
-    setIsSaving(true)
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    setIsSaving(false)
-    setIsEditing(false)
-    toast.success("Profile updated successfully!")
+    try {
+      setIsSaving(true)
+      await usersAPI.updateProfile(formData)
+      toast.success("Profile updated successfully!")
+      setIsEditing(false)
+    } catch (error) {
+      toast.error("Failed to update profile")
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const handleLogout = () => {
@@ -289,7 +311,11 @@ export default function ProfilePage() {
               </Button>
             </CardHeader>
             <CardContent>
-              {myItems.length > 0 ? (
+              {loading ? (
+                <div className="flex items-center justify-center py-16">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : myItems.length > 0 ? (
                 <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                   {myItems.map((item) => (
                     <ItemCard key={item.id} item={item} />

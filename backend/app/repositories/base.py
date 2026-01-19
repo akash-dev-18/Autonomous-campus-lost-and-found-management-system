@@ -119,7 +119,11 @@ class BaseCRUD(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         Returns:
             Created model instance
         """
-        obj_data = obj_in.model_dump() if hasattr(obj_in, 'model_dump') else obj_in.dict()
+        if isinstance(obj_in, dict):
+            obj_data = obj_in
+        else:
+            obj_data = obj_in.model_dump() if hasattr(obj_in, 'model_dump') else obj_in.dict()
+        
         db_obj = self.model(**obj_data)
         
         self.db.add(db_obj)

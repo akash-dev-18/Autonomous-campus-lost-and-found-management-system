@@ -14,7 +14,7 @@ router = APIRouter()
 
 @router.get("/me", response_model=UserProfile)
 async def get_current_user_profile(
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_user),
     item_repo: ItemRepository = Depends(get_item_repository)
 ):
     """Get current user's profile with statistics"""
@@ -61,21 +61,6 @@ async def change_password(
     return {"message": "Password updated successfully"}
 
 
-@router.get("/{user_id}", response_model=UserResponse)
-async def get_user(
-    user_id: UUID,
-    user_repo: UserRepository = Depends(get_user_repository)
-):
-    """Get user by ID"""
-    user = await user_repo.get(user_id)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
-    return user
-
-
 @router.get("/", response_model=List[UserResponse])
 async def list_users(
     skip: int = 0,
@@ -97,3 +82,18 @@ async def search_users(
     """Search users by name, email, or student ID"""
     users = await user_repo.search_users(query, skip=skip, limit=limit)
     return users
+
+
+@router.get("/{user_id}", response_model=UserResponse)
+async def get_user(
+    user_id: UUID,
+    user_repo: UserRepository = Depends(get_user_repository)
+):
+    """Get user by ID"""
+    user = await user_repo.get(user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    return user

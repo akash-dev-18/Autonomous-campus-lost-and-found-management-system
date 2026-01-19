@@ -1,6 +1,6 @@
 "use client"
 
-import { use, useState } from "react"
+import { use, useState, useEffect } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -17,6 +17,7 @@ import {
   Trash2,
   ClipboardCheck,
   Sparkles,
+  Loader2,
 } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -36,19 +37,87 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
-import { mockItems, mockMatches, currentUser } from "@/lib/mock-data"
+import { itemsAPI, matchesAPI, claimsAPI } from "@/lib/api"
+import type { Item, Match } from "@/lib/types"
+import { useAuth } from "@/context/auth-context"
 import { cn } from "@/lib/utils"
 import { ItemCard } from "@/components/features/item-card"
 
 export default function ItemDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
+  const { user } = useAuth()
+  const [item, setItem] = useState<Item | null>(null)
+  const [matches, setMatches] = useState<Match[]>([])
+  const [similarItems, setSimilarItems] = useState<Item[]>([])
+  const [loading, setLoading] = useState(true)
   const [claimDialogOpen, setClaimDialogOpen] = useState(false)
   const [claimDescription, setClaimDescription] = useState("")
   const [verificationKey, setVerificationKey] = useState("")
   const [verificationValue, setVerificationValue] = useState("")
 
-  const item = mockItems.find((i) => i.id === id)
+  useEffect(() => {
+    async function fetchItemData() {
+      try {
+        setLoading(true)
+        const [itemData, matchesData, allItems] = await Promise.all([
+          itemsAPI.getItem(id),
+          matchesAPI.getItemMatches(id).catch(() => []),
+          itemsAPI.getItems({ limit: 20 }),
+        ])
+        setItem(itemData)
+        setMatches(Array.isArray(matchesData) ? matchesData : matchesData.matches || [])
+        
+        // Filter similar items by category
+        const similar = allItems.items
+          .filter((i) => i.id !== id && i.category === itemData.category)
+          .slice(0, 3)
+        setSimilarItems(similar)
+      } catch (error) {
+        console.error("Failed to fetch item:", error)
+        toast.error("Failed to load item")
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchItemData()
+  }, [id])
+
+  const handleClaim = async () => {
+    try {
+      await claimsAPI.createClaim({
+        item_id: id,
+        verification_answers: {
+          description: claimDescription,
+          ...(verificationKey && verificationValue 
+            ? { [verificationKey]: verificationValue }
+            : {})
+        }
+      })
+      toast.success("Claim submitted successfully! The owner will be notified.")
+      setClaimDialogOpen(false)
+      setClaimDescription("")
+      setVerificationKey("")
+      setVerificationValue("")
+    } catch (error) {
+      toast.error("Failed to submit claim")
+    }
+  }
+
+  const handleDelete = async () => {
+    try {
+      await itemsAPI.deleteItem(id)
+      toast.success("Item deleted successfully")
+      router.push("/items")
+    } catch (error) {
+      toast.error("Failed to delete item")
+    }
+  }
+
+  const handleShare = () => {
+    navigator.clipboard.writeText(window.location.href)
+    toast.success("Link copied to clipboard!")
+  }
 
   if (!item) {
     return (
@@ -67,30 +136,14 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
     )
   }
 
-  const isOwner = item.user_id === currentUser.id
-  const relatedMatches = mockMatches.filter(
-    (m) => m.lost_item_id === id || m.found_item_id === id
-  )
-  const similarItems = mockItems
-    .filter((i) => i.id !== id && i.category === item.category)
-    .slice(0, 3)
+  const isOwner = item.user_id === user?.id
 
-  const handleClaim = () => {
-    toast.success("Claim submitted successfully! The owner will be notified.")
-    setClaimDialogOpen(false)
-    setClaimDescription("")
-    setVerificationKey("")
-    setVerificationValue("")
-  }
-
-  const handleDelete = () => {
-    toast.success("Item deleted successfully")
-    router.push("/items")
-  }
-
-  const handleShare = () => {
-    navigator.clipboard.writeText(window.location.href)
-    toast.success("Link copied to clipboard!")
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
   }
 
   return (
@@ -213,7 +266,7 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
           </Card>
 
           {/* AI Matches */}
-          {relatedMatches.length > 0 && (
+          {matches.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -226,7 +279,7 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {relatedMatches.map((match) => {
+                  {matches.map((match) => {
                     const matchedItem =
                       match.lost_item_id === id ? match.found_item : match.lost_item
                     const score = Math.round(match.similarity_score * 100)

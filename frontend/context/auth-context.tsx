@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
 import type { User } from "@/lib/types"
-import { currentUser as mockCurrentUser } from "@/lib/mock-data"
+import { authAPI } from "@/lib/api/auth"
 
 interface AuthContextType {
   user: User | null
@@ -29,57 +29,69 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Check for existing session
     const storedUser = localStorage.getItem("user")
-    if (storedUser) {
-      setUser(JSON.parse(storedUser))
+    const token = localStorage.getItem("access_token")
+    
+    if (storedUser && token) {
+      try {
+        setUser(JSON.parse(storedUser))
+        // Optionally verify token is still valid
+        authAPI.getCurrentUser()
+          .then((userData) => {
+            setUser(userData)
+            localStorage.setItem("user", JSON.stringify(userData))
+          })
+          .catch(() => {
+            // Token invalid, clear storage
+            localStorage.clear()
+            setUser(null)
+          })
+      } catch (error) {
+        // Corrupted localStorage data, clear it
+        console.error('Failed to parse stored user data:', error)
+        localStorage.clear()
+        setUser(null)
+      }
     }
     setIsLoading(false)
   }, [])
 
-  const login = async (email: string, _password: string) => {
-    // Mock login - in production, this would call the API
+  const login = async (email: string, password: string) => {
     setIsLoading(true)
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-
-    // Mock validation
-    if (email === "demo@example.com" || email === "john@example.com") {
-      const userData = { ...mockCurrentUser, email }
-      setUser(userData)
-      localStorage.setItem("user", JSON.stringify(userData))
-      localStorage.setItem("access_token", "mock_access_token")
-      localStorage.setItem("refresh_token", "mock_refresh_token")
-    } else {
-      throw new Error("Invalid credentials")
+    try {
+      const response = await authAPI.login(email, password)
+      
+      setUser(response.user)
+      localStorage.setItem("user", JSON.stringify(response.user))
+      localStorage.setItem("access_token", response.access_token)
+      localStorage.setItem("refresh_token", response.refresh_token)
+    } catch (error) {
+      throw error
+    } finally {
+      setIsLoading(false)
     }
-    setIsLoading(false)
   }
 
   const register = async (data: RegisterData) => {
     setIsLoading(true)
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-
-    const newUser: User = {
-      id: `user-${Date.now()}`,
-      email: data.email,
-      full_name: data.full_name,
-      student_id: data.student_id,
-      role: "user",
-      reputation_score: 0,
-      is_active: true,
-      created_at: new Date().toISOString(),
+    try {
+      const response = await authAPI.register(data)
+      
+      setUser(response.user)
+      localStorage.setItem("user", JSON.stringify(response.user))
+      localStorage.setItem("access_token", response.access_token)
+      localStorage.setItem("refresh_token", response.refresh_token)
+    } catch (error) {
+      throw error
+    } finally {
+      setIsLoading(false)
     }
-
-    setUser(newUser)
-    localStorage.setItem("user", JSON.stringify(newUser))
-    localStorage.setItem("access_token", "mock_access_token")
-    localStorage.setItem("refresh_token", "mock_refresh_token")
-    setIsLoading(false)
   }
 
   const logout = () => {
-    setUser(null)
-    localStorage.removeItem("user")
-    localStorage.removeItem("access_token")
-    localStorage.removeItem("refresh_token")
+    authAPI.logout().finally(() => {
+      setUser(null)
+      localStorage.clear()
+    })
   }
 
   return (

@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import {
   Package,
@@ -10,78 +11,81 @@ import {
   Search,
   ArrowRight,
   TrendingUp,
+  Loader2,
 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/context/auth-context"
-import { mockItems, mockMatches, mockClaims } from "@/lib/mock-data"
+import { itemsAPI, matchesAPI, claimsAPI } from "@/lib/api"
+import type { Item, Match, Claim } from "@/lib/types"
 import { ItemCard } from "@/components/features/item-card"
-
-const stats = [
-  {
-    name: "My Items",
-    value: mockItems.filter((i) => i.user_id === "user-1").length,
-    icon: Package,
-    href: "/items?mine=true",
-    color: "text-primary",
-    bgColor: "bg-primary/10",
-  },
-  {
-    name: "Active Matches",
-    value: mockMatches.length,
-    icon: Sparkles,
-    href: "/matches",
-    color: "text-success",
-    bgColor: "bg-success/10",
-  },
-  {
-    name: "Pending Claims",
-    value: mockClaims.filter((c) => c.status === "pending").length,
-    icon: ClipboardList,
-    href: "/claims",
-    color: "text-warning",
-    bgColor: "bg-warning/10",
-  },
-  {
-    name: "Unread Messages",
-    value: 2,
-    icon: MessageSquare,
-    href: "/messages",
-    color: "text-chart-1",
-    bgColor: "bg-chart-1/10",
-  },
-]
-
-const recentActivity = [
-  {
-    id: 1,
-    type: "match",
-    message: "New match found for your lost iPhone",
-    time: "2 hours ago",
-  },
-  {
-    id: 2,
-    type: "claim",
-    message: "Your claim for the student ID was approved",
-    time: "5 hours ago",
-  },
-  {
-    id: 3,
-    type: "message",
-    message: "New message from Jane Smith",
-    time: "1 day ago",
-  },
-  {
-    id: 4,
-    type: "item",
-    message: "Someone found car keys near the gym",
-    time: "2 days ago",
-  },
-]
+import { toast } from "sonner"
 
 export default function DashboardPage() {
   const { user } = useAuth()
-  const recentItems = mockItems.slice(0, 4)
+  const [items, setItems] = useState<Item[]>([])
+  const [matches, setMatches] = useState<Match[]>([])
+  const [claims, setClaims] = useState<Claim[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function fetchDashboardData() {
+      try {
+        setLoading(true)
+        const [itemsRes, matchesRes, claimsRes] = await Promise.all([
+          itemsAPI.getItems({ limit: 4 }),
+          matchesAPI.getMyMatches().catch(() => ({ matches: [] })),
+          claimsAPI.getClaims().catch(() => []),
+        ])
+        setItems(itemsRes.items || [])
+        setMatches(Array.isArray(matchesRes) ? matchesRes : matchesRes.matches || [])
+        setClaims(claimsRes || [])
+      } catch (error) {
+        console.error("Failed to fetch dashboard data:", error)
+        toast.error("Failed to load dashboard data")
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchDashboardData()
+  }, [])
+
+  const stats = [
+    {
+      name: "My Items",
+      value: items.filter((i) => i.user_id === user?.id).length,
+      icon: Package,
+      href: "/items?mine=true",
+      color: "text-primary",
+      bgColor: "bg-primary/10",
+    },
+    {
+      name: "Active Matches",
+      value: matches.length,
+      icon: Sparkles,
+      href: "/matches",
+      color: "text-success",
+      bgColor: "bg-success/10",
+    },
+    {
+      name: "Pending Claims",
+      value: claims.filter((c) => c.status === "pending").length,
+      icon: ClipboardList,
+      href: "/claims",
+      color: "text-warning",
+      bgColor: "bg-warning/10",
+    },
+    {
+      name: "Total Items",
+      value: items.length,
+      icon: MessageSquare,
+      href: "/items",
+      color: "text-chart-1",
+      bgColor: "bg-chart-1/10",
+    },
+  ]
+
+  const recentItems = items.slice(0, 4)
 
   return (
     <div className="space-y-8">
@@ -112,28 +116,34 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat) => {
-          const Icon = stat.icon
-          return (
-            <Link key={stat.name} href={stat.href}>
-              <Card className="transition-all hover:shadow-md hover:-translate-y-0.5">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-muted-foreground">{stat.name}</p>
-                      <p className="text-3xl font-bold text-foreground">{stat.value}</p>
+      {loading ? (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {stats.map((stat) => {
+            const Icon = stat.icon
+            return (
+              <Link key={stat.name} href={stat.href}>
+                <Card className="transition-all hover:shadow-md hover:-translate-y-0.5">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">{stat.name}</p>
+                        <p className="text-3xl font-bold text-foreground">{stat.value}</p>
+                      </div>
+                      <div className={`rounded-xl p-3 ${stat.bgColor}`}>
+                        <Icon className={`h-6 w-6 ${stat.color}`} />
+                      </div>
                     </div>
-                    <div className={`rounded-xl p-3 ${stat.bgColor}`}>
-                      <Icon className={`h-6 w-6 ${stat.color}`} />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          )
-        })}
-      </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            )
+          })}
+        </div>
+      )}
 
       {/* Quick Actions */}
       <Card>
@@ -183,54 +193,34 @@ export default function DashboardPage() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-8 lg:grid-cols-3">
-        {/* Recent Activity */}
-        <Card className="lg:col-span-1">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle>Recent Activity</CardTitle>
-              <CardDescription>Your latest updates</CardDescription>
-            </div>
-            <TrendingUp className="h-5 w-5 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {recentActivity.map((activity) => (
-                <div key={activity.id} className="flex items-start gap-3">
-                  <div className="mt-1 h-2 w-2 rounded-full bg-primary" />
-                  <div className="flex-1 space-y-1">
-                    <p className="text-sm text-foreground">{activity.message}</p>
-                    <p className="text-xs text-muted-foreground">{activity.time}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Recent Items */}
-        <Card className="lg:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle>Recent Items</CardTitle>
-              <CardDescription>Latest lost & found items</CardDescription>
-            </div>
-            <Button asChild variant="ghost" size="sm">
-              <Link href="/items">
-                View all
-                <ArrowRight className="ml-1 h-4 w-4" />
-              </Link>
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 sm:grid-cols-2">
+      {/* Recent Items */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Recent Items</CardTitle>
+            <CardDescription>Latest lost & found items</CardDescription>
+          </div>
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/items">
+              View all
+              <ArrowRight className="ml-1 h-4 w-4" />
+            </Link>
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {recentItems.length > 0 ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {recentItems.map((item) => (
                 <ItemCard key={item.id} item={item} />
               ))}
             </div>
-          </CardContent>
-        </Card>
-      </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <p>No items yet. Create your first item!</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }
