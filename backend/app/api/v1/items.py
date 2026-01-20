@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, BackgroundTasks
 from typing import List, Optional
 from uuid import UUID
 
 from app.schemas.item import ItemCreate, ItemUpdate, ItemResponse, ItemList, ItemSearch
-from app.repositories import ItemRepository
-from app.dependencies import get_item_repository
+from app.repositories import ItemRepository, MatchRepository
+from app.dependencies import get_item_repository, get_match_repository
 from app.api.deps import get_current_active_user
 from app.models.user import User
 from app.models.item import ItemType, ItemStatus
@@ -15,8 +15,10 @@ router = APIRouter()
 @router.post("/", response_model=ItemResponse, status_code=status.HTTP_201_CREATED)
 async def create_item(
     item_data: ItemCreate,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_active_user),
-    item_repo: ItemRepository = Depends(get_item_repository)
+    item_repo: ItemRepository = Depends(get_item_repository),
+    match_repo: MatchRepository = Depends(get_match_repository)
 ):
     """
     Create a new lost or found item.
@@ -47,7 +49,10 @@ async def create_item(
     
     item = await item_repo.create(ItemCreateDB(**item_dict))
     
-    # TODO: Trigger matching algorithm in background
+    # Trigger matching algorithm in background
+    from app.services.matching import MatchingService
+    service = MatchingService(item_repo, match_repo)
+    background_tasks.add_task(service.process_matches_for_item, item.id)
     
     return item
 

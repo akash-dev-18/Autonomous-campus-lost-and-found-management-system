@@ -4,8 +4,7 @@ import { Platform } from "react-native";
 
 // CHANGE THIS TO YOUR LOCAL LAN IP for physical device testing
 // Run `ip addr` (Linux/Mac) or `ipconfig` (Windows) to find it.
-// e.g., "http://192.168.1.15:8000"
-export const API_URL = "http://localhost:8000"; 
+export const API_URL = "http://172.29.48.224:8000"; 
 
 const api = axios.create({
   baseURL: API_URL,

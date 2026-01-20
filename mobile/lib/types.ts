@@ -5,6 +5,7 @@ export interface User {
   role: "user" | "admin";
   avatar?: string;
   reputation_score: number;
+  phone_number?: string;
 }
 
 export interface AuthResponse {

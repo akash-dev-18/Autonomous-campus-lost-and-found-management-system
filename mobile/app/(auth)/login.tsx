@@ -18,12 +18,11 @@ export default function Login() {
 
     setLoading(true);
     try {
-      const formData = new FormData();
-      formData.append("username", email); // OAuth2PasswordRequestForm expects 'username'
-      formData.append("password", password);
+      console.log("Sending Login Request (JSON):", { email, password }); // DEBUG
 
-      const response = await api.post("/api/v1/auth/login", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
+      const response = await api.post("/api/v1/auth/login", {
+        email: email,
+        password: password
       });
 
       const { access_token, user } = response.data;
