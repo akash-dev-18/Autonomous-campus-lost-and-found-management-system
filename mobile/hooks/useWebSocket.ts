@@ -55,9 +55,12 @@ export function useWebSocket() {
         }
       };
 
-      ws.onclose = () => {
-        console.log('WS Disconnected');
+      ws.onclose = (e) => {
+        console.log('WS Disconnected', e.code, e.reason);
         setIsConnected(false);
+        if (e.code === 1008) {
+            setError("Session expired. Please log in again.");
+        }
       };
 
       wsRef.current = ws;

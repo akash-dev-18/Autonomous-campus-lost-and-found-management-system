@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { View, Text, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, ActivityIndicator } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, ActivityIndicator, Alert } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Send, ArrowLeft } from "lucide-react-native";
 import { useAuth } from "../../context/auth";
@@ -74,8 +74,16 @@ export default function ChatScreen() {
           new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
       );
       setMessages(sorted);
-    } catch (error) {
+    } catch (error: any) {
        console.log("Error fetching conversation:", error);
+       if (error.response?.status === 401) {
+           Alert.alert("Session Expired", "Please log in again.", [
+               { text: "OK", onPress: () => {
+                   // Clean up
+                   router.replace("/(auth)/login");
+               }}
+           ]);
+       }
     } finally {
       setLoading(false);
     }
